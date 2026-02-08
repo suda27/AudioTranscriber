@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { S3Service } from './services/s3.service';
 import { TranscribeService } from './services/transcribe.service';
+import { OpenAIService } from './services/openai.service';
 
 export interface SpeakerSegment {
   speaker: string;
@@ -48,10 +49,14 @@ export class AppComponent {
   searchMatches: number = 0; // Total number of matches
   currentMatchIndex: number = -1; // Current highlighted match (0-based)
   searchResults: { segmentIndex?: number; matchIndex: number }[] = []; // All match positions
+  summary: string = ''; // Generated summary
+  isGeneratingSummary: boolean = false; // Loading state for summary generation
+  summaryError: string = ''; // Error message for summary generation
 
   constructor(
     private s3Service: S3Service,
-    private transcribeService: TranscribeService
+    private transcribeService: TranscribeService,
+    private openaiService: OpenAIService
   ) {
     this.loadSavedJobs();
     this.loadSpeakerNames();
@@ -66,6 +71,9 @@ export class AppComponent {
       this.transcriptionResult = '';
       this.speakerSegments = [];
       this.transcriptionStatus = '';
+      this.summary = '';
+      this.summaryError = '';
+      this.clearSearch();
     }
   }
 
@@ -207,6 +215,10 @@ export class AppComponent {
   }
 
   async retrieveJob(job: SavedJob): Promise<void> {
+    // Clear summary when loading a new job
+    this.summary = '';
+    this.summaryError = '';
+    
     if (job.status === 'completed' && job.transcript) {
       this.transcriptionResult = job.transcript;
       this.speakerSegments = job.speakerSegments || [];
@@ -504,5 +516,42 @@ export class AppComponent {
 
   getMatchCountInSegment(segmentIndex: number): number {
     return this.searchResults.filter(r => r.segmentIndex === segmentIndex).length;
+  }
+
+  // Summary generation
+  async generateSummary(): Promise<void> {
+    if (!this.transcriptionResult && this.speakerSegments.length === 0) {
+      this.summaryError = 'No transcription available to summarize.';
+      return;
+    }
+
+    this.isGeneratingSummary = true;
+    this.summaryError = '';
+    this.summary = '';
+
+    try {
+      const summaryText = await this.openaiService.generateSummary(
+        this.transcriptionResult,
+        this.speakerSegments.length > 0 ? this.speakerSegments : undefined
+      );
+      this.summary = summaryText;
+    } catch (error: any) {
+      console.error('Error generating summary:', error);
+      this.summaryError = error.message || 'Failed to generate summary. Please try again.';
+    } finally {
+      this.isGeneratingSummary = false;
+    }
+  }
+
+  async copySummaryToClipboard(): Promise<void> {
+    if (!this.summary) return;
+    
+    try {
+      await navigator.clipboard.writeText(this.summary);
+      alert('Summary copied to clipboard!');
+    } catch (error) {
+      console.error('Failed to copy summary:', error);
+      alert('Failed to copy summary to clipboard');
+    }
   }
 }
