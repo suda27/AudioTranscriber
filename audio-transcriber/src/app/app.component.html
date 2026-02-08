@@ -1,0 +1,167 @@
+<div class="container">
+  <header>
+    <h1>🎙️ Audio Transcriber</h1>
+    <p class="subtitle">Upload an audio file and get it transcribed using AWS Transcribe</p>
+  </header>
+
+  <main class="main-content">
+    <div class="upload-section">
+      <div class="file-input-wrapper">
+        <input 
+          type="file" 
+          id="audioFile" 
+          accept="audio/*" 
+          (change)="onFileSelected($event)"
+          class="file-input"
+        />
+        <label for="audioFile" class="file-label">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span>{{ selectedFile ? selectedFile.name : 'Choose Audio File' }}</span>
+        </label>
+      </div>
+
+      <div *ngIf="selectedFile" class="file-info">
+        <p><strong>File:</strong> {{ selectedFile.name }}</p>
+        <p><strong>Size:</strong> {{ formatFileSize(selectedFile.size) }}</p>
+        <p><strong>Type:</strong> {{ selectedFile.type || 'Unknown' }}</p>
+      </div>
+
+      <button 
+        class="transcribe-button"
+        (click)="showConfirmationModal()"
+        [disabled]="!selectedFile || isUploading || isTranscribing"
+      >
+        <span *ngIf="!isUploading && !isTranscribing">🚀 Upload & Transcribe</span>
+        <span *ngIf="isUploading || isTranscribing">⏳ Processing...</span>
+      </button>
+
+      <button 
+        class="saved-jobs-button"
+        (click)="showSavedJobs = !showSavedJobs"
+        *ngIf="savedJobs.length > 0"
+      >
+        📚 Saved Jobs ({{ savedJobs.length }})
+      </button>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div *ngIf="showConfirmModal" class="modal-overlay" (click)="closeConfirmModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <h3>Confirm Upload & Transcribe</h3>
+        <div *ngIf="selectedFile" class="modal-file-info">
+          <p><strong>File:</strong> {{ selectedFile.name }}</p>
+          <p><strong>Size:</strong> {{ formatFileSize(selectedFile.size) }}</p>
+          <p><strong>Type:</strong> {{ selectedFile.type || 'Unknown' }}</p>
+        </div>
+        <p class="modal-message">Are you sure you want to upload this file and start transcription?</p>
+        <div class="modal-actions">
+          <button class="modal-btn cancel" (click)="closeConfirmModal()">Cancel</button>
+          <button class="modal-btn confirm" (click)="confirmAndUpload()">Confirm & Upload</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Saved Jobs Section -->
+    <div *ngIf="showSavedJobs && savedJobs.length > 0" class="saved-jobs-section">
+      <div class="saved-jobs-header">
+        <h3>📚 Saved Transcription Jobs</h3>
+        <button class="close-btn" (click)="showSavedJobs = false">✕</button>
+      </div>
+      <div class="jobs-list">
+        <div *ngFor="let job of savedJobs" class="job-item">
+          <div class="job-info">
+            <span class="job-status">{{ getJobStatusIcon(job.status) }}</span>
+            <div class="job-details">
+              <p class="job-file-name"><strong>{{ job.fileName }}</strong></p>
+              <p class="job-meta">{{ formatFileSize(job.fileSize) }} • {{ formatDate(job.startTime) }}</p>
+            </div>
+          </div>
+          <div class="job-actions">
+            <button 
+              class="job-btn retrieve" 
+              (click)="retrieveJob(job)"
+              *ngIf="job.status === 'completed' || job.status === 'in_progress'"
+            >
+              {{ job.status === 'completed' ? 'View' : 'Check Status' }}
+            </button>
+            <button class="job-btn delete" (click)="deleteJob(job.jobName)">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="isUploading || isTranscribing" class="progress-section">
+      <div class="progress-bar">
+        <div class="progress-fill" [style.width.%]="uploadProgress"></div>
+      </div>
+      <p class="status-text">{{ transcriptionStatus }}</p>
+    </div>
+
+    <div *ngIf="errorMessage" class="error-message">
+      <strong>❌ Error:</strong> {{ errorMessage }}
+    </div>
+
+    <div *ngIf="transcriptionResult" class="result-section">
+      <div class="result-header">
+        <h2>📝 Transcription Result</h2>
+        <div class="view-toggle" *ngIf="speakerSegments.length > 0">
+          <button 
+            class="toggle-btn" 
+            [class.active]="showSpeakerView"
+            (click)="showSpeakerView = true"
+          >
+            👥 By Speaker
+          </button>
+          <button 
+            class="toggle-btn" 
+            [class.active]="!showSpeakerView"
+            (click)="showSpeakerView = false"
+          >
+            📄 Full Text
+          </button>
+        </div>
+      </div>
+
+      <!-- Speaker-segmented view -->
+      <div *ngIf="showSpeakerView && speakerSegments.length > 0" class="speaker-transcription">
+        <div 
+          *ngFor="let segment of speakerSegments; let i = index" 
+          class="speaker-segment"
+          [style.border-left-color]="getSpeakerColor(segment.speaker)"
+        >
+          <div class="speaker-header">
+            <span 
+              class="speaker-badge"
+              [style.background-color]="getSpeakerColor(segment.speaker)"
+            >
+              {{ formatSpeakerName(segment.speaker) }}
+            </span>
+            <span class="time-stamp">{{ formatTime(segment.startTime) }} - {{ formatTime(segment.endTime) }}</span>
+          </div>
+          <p class="speaker-text">{{ segment.text }}</p>
+        </div>
+      </div>
+
+      <!-- Full text view -->
+      <div *ngIf="!showSpeakerView || speakerSegments.length === 0" class="transcription-box">
+        <p>{{ transcriptionResult }}</p>
+      </div>
+
+      <button class="copy-button" (click)="copyToClipboard()">📋 Copy to Clipboard</button>
+  </div>
+</main>
+
+  <footer class="info-section">
+    <h3>ℹ️ Setup Instructions</h3>
+    <ol>
+      <li>Configure AWS credentials in <code>aws-config.service.ts</code></li>
+      <li>Set up an S3 bucket and update the bucket name</li>
+      <li>Ensure your AWS credentials have permissions for S3 and Transcribe</li>
+      <li>For production, use AWS Cognito Identity Pool for secure credential management</li>
+    </ol>
+  </footer>
+</div>
