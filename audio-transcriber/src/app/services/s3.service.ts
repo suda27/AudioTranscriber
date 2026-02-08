@@ -135,6 +135,49 @@ export class S3Service {
     }
   }
 
+  async getObjectAsBlob(bucketName: string, key: string, contentType?: string): Promise<Blob> {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key
+      });
+
+      const response = await this.s3Client.send(command);
+      
+      // Convert the stream to Blob
+      if (response.Body) {
+        // In browser, Body is a ReadableStream
+        const stream = response.Body as ReadableStream;
+        const reader = stream.getReader();
+        const chunks: Uint8Array[] = [];
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+          }
+        }
+        
+        // Combine chunks into a Blob
+        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+        const result = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+          result.set(chunk, offset);
+          offset += chunk.length;
+        }
+        
+        return new Blob([result], { type: contentType || response.ContentType || 'application/octet-stream' });
+      }
+      
+      throw new Error('No body in S3 response');
+    } catch (error: any) {
+      console.error('Error getting object from S3 as Blob:', error);
+      throw new Error(`Failed to get object from S3: ${error.message || error}`);
+    }
+  }
+
   parseS3Uri(uri: string): { bucket: string; key: string } | null {
     // Handle s3://bucket/key format
     if (uri.startsWith('s3://')) {

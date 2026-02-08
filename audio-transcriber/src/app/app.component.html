@@ -32,6 +32,22 @@
         <p><strong>Type:</strong> {{ selectedFile.type || 'Unknown' }}</p>
       </div>
 
+      <!-- Audio Player -->
+      <div *ngIf="audioUrl && selectedFile" class="audio-player-section">
+        <div class="audio-player-header">
+          <span class="audio-icon">🎵</span>
+          <span class="audio-label">Audio Preview</span>
+        </div>
+        <audio 
+          [src]="audioUrl" 
+          controls 
+          class="audio-player"
+          preload="metadata"
+        >
+          Your browser does not support the audio element.
+        </audio>
+      </div>
+
       <button 
         class="transcribe-button"
         (click)="showConfirmationModal()"
@@ -108,6 +124,22 @@
             </div>
           </div>
 
+          <!-- Audio Player in Transcription Section -->
+          <div *ngIf="audioUrl && selectedFile" class="audio-player-section-transcript">
+            <div class="audio-player-header">
+              <span class="audio-icon">🎵</span>
+              <span class="audio-label">Audio Preview</span>
+            </div>
+            <audio 
+              [src]="audioUrl" 
+              controls 
+              class="audio-player"
+              preload="metadata"
+            >
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+
       <!-- Speaker-segmented view - Chat Style -->
           <div *ngIf="showSpeakerView && speakerSegments.length > 0" class="chat-container">
         <!-- Speaker Name Editor Section - Compact -->
@@ -176,7 +208,7 @@
       <!-- End Column 2 -->
 
       <!-- Column 3: Summary -->
-      <div class="column column-summary" *ngIf="transcriptionResult || speakerSegments.length > 0">
+      <div class="column column-summary" *ngIf="summary || isGeneratingSummary || summaryError">
         <div class="summary-section">
           <div class="summary-header">
           <div class="summary-title-group">
@@ -218,12 +250,6 @@
               <span>Copy Summary</span>
             </button>
           </div>
-          </div>
-
-          <div *ngIf="!summary && !isGeneratingSummary && !summaryError" class="summary-placeholder">
-            <div class="placeholder-icon">💡</div>
-            <p class="placeholder-text">Click "Generate Summary" to create an AI-powered summary of this conversation.</p>
-            <p class="placeholder-hint">Get key insights, main topics, and important points in seconds.</p>
           </div>
         </div>
       </div>
@@ -277,6 +303,26 @@
         <div *ngIf="savedJobs.length === 0" class="no-jobs-message">
           <p>No saved jobs yet. Your transcription jobs will appear here.</p>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div *ngIf="showConfirmModal" class="modal-overlay" (click)="closeConfirmModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <h3>Confirm Upload & Transcribe</h3>
+      <div class="modal-file-info" *ngIf="selectedFile">
+        <p><strong>File Name:</strong> {{ selectedFile.name }}</p>
+        <p><strong>File Size:</strong> {{ formatFileSize(selectedFile.size) }}</p>
+        <p><strong>File Type:</strong> {{ selectedFile.type || 'Unknown' }}</p>
+      </div>
+      <p class="modal-message">
+        This will upload your audio file to AWS S3 and start a transcription job. 
+        The process may take a few minutes depending on the file size.
+      </p>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" (click)="closeConfirmModal()">Cancel</button>
+        <button class="modal-btn confirm" (click)="confirmAndUpload()">Confirm & Upload</button>
       </div>
     </div>
   </div>

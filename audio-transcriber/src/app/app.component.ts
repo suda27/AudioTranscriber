@@ -1,4 +1,4 @@
-import { Component, HostListener } from '@angular/core';
+import { Component, HostListener, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { S3Service } from './services/s3.service';
@@ -20,6 +20,7 @@ interface SavedJob {
   status: 'in_progress' | 'completed' | 'failed';
   transcript?: string;
   speakerSegments?: SpeakerSegment[];
+  s3Uri?: string; // S3 URI for audio file
 }
 
 @Component({
@@ -28,8 +29,9 @@ interface SavedJob {
   templateUrl: './app.component.html',
   styleUrl: './app.component.css'
 })
-export class AppComponent {
+export class AppComponent implements OnDestroy {
   selectedFile: File | null = null;
+  audioUrl: string | null = null; // Object URL for audio playback
   isUploading: boolean = false;
   isTranscribing: boolean = false;
   uploadProgress: number = 0;
@@ -63,7 +65,22 @@ export class AppComponent {
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
+      // Clean up previous audio URL if it exists
+      if (this.audioUrl) {
+        URL.revokeObjectURL(this.audioUrl);
+        this.audioUrl = null;
+      }
+      
       this.selectedFile = input.files[0];
+      // Create object URL for audio playback (supports all audio formats)
+      // Always create URL - browser will handle playback capability
+      try {
+        this.audioUrl = URL.createObjectURL(this.selectedFile);
+      } catch (error) {
+        console.error('Error creating object URL:', error);
+        this.audioUrl = null;
+      }
+      
       this.errorMessage = '';
       this.transcriptionResult = '';
       this.speakerSegments = [];
@@ -117,13 +134,14 @@ export class AppComponent {
       const jobName = `transcription-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
       this.currentJobName = jobName;
       
-      // Save job to session storage
+      // Save job to session storage with S3 URI
       const jobInfo: SavedJob = {
         jobName: jobName,
         fileName: this.selectedFile!.name,
         fileSize: this.selectedFile!.size,
         startTime: Date.now(),
-        status: 'in_progress'
+        status: 'in_progress',
+        s3Uri: s3Uri // Store S3 URI instead of audio data
       };
       this.saveJob(jobInfo);
       
@@ -137,10 +155,11 @@ export class AppComponent {
       this.transcriptionStatus = 'Transcription completed successfully!';
       this.isTranscribing = false;
 
-      // Update saved job with results
+      // Update saved job with results (keep existing s3Uri)
       jobInfo.status = 'completed';
       jobInfo.transcript = result.transcript;
       jobInfo.speakerSegments = result.speakerSegments || [];
+      // s3Uri is already set, no need to update
       this.saveJob(jobInfo);
 
     } catch (error: any) {
@@ -169,8 +188,21 @@ export class AppComponent {
     } else {
       jobs.push(job);
     }
-    sessionStorage.setItem('transcriptionJobs', JSON.stringify(jobs));
-    this.savedJobs = jobs;
+    
+    try {
+      sessionStorage.setItem('transcriptionJobs', JSON.stringify(jobs));
+      this.savedJobs = jobs;
+    } catch (error: any) {
+      // Handle quota exceeded error
+      if (error.name === 'QuotaExceededError' || error.message?.includes('quota')) {
+        console.error('Session storage quota exceeded:', error);
+        this.errorMessage = 'Storage quota exceeded. Please clear some saved jobs or refresh the page.';
+      } else {
+        // Other storage errors
+        console.error('Error saving to session storage:', error);
+        this.errorMessage = 'Failed to save job: ' + (error.message || 'Unknown error');
+      }
+    }
   }
 
   private getSavedJobs(): SavedJob[] {
@@ -198,6 +230,7 @@ export class AppComponent {
             job.status = 'completed';
             job.transcript = result.transcript;
             job.speakerSegments = result.speakerSegments || [];
+            // s3Uri is already set, no need to update
             this.saveJob(job);
           } else if (result.status === 'FAILED') {
             job.status = 'failed';
@@ -215,6 +248,42 @@ export class AppComponent {
     this.summary = '';
     this.summaryError = '';
     this.errorMessage = '';
+    
+    // Restore audio from S3 if available
+    if (job.s3Uri) {
+      // Clean up previous audio URL if it exists
+      if (this.audioUrl) {
+        URL.revokeObjectURL(this.audioUrl);
+      }
+      
+      try {
+        // Parse S3 URI to get bucket and key
+        const s3Info = this.s3Service.parseS3Uri(job.s3Uri);
+        if (s3Info) {
+          // Fetch audio file from S3 as Blob
+          const blob = await this.s3Service.getObjectAsBlob(s3Info.bucket, s3Info.key, this.getContentTypeFromFileName(job.fileName));
+          this.audioUrl = URL.createObjectURL(blob);
+          // Create a File object for selectedFile
+          this.selectedFile = new File([blob], job.fileName, { type: blob.type });
+        } else {
+          console.error('Invalid S3 URI format:', job.s3Uri);
+          this.audioUrl = null;
+          this.selectedFile = null;
+        }
+      } catch (error) {
+        console.error('Error fetching audio file from S3:', error);
+        this.errorMessage = 'Failed to load audio file from S3. ' + (error instanceof Error ? error.message : 'Unknown error');
+        this.audioUrl = null;
+        this.selectedFile = null;
+      }
+    } else {
+      // No S3 URI stored, clear it
+      if (this.audioUrl) {
+        URL.revokeObjectURL(this.audioUrl);
+        this.audioUrl = null;
+      }
+      this.selectedFile = null;
+    }
     
     if (job.status === 'completed' && (job.transcript || (job.speakerSegments && job.speakerSegments.length > 0))) {
       this.transcriptionResult = job.transcript || '';
@@ -235,6 +304,7 @@ export class AppComponent {
         job.status = 'completed';
         job.transcript = result.transcript;
         job.speakerSegments = result.speakerSegments || [];
+        // s3Uri is already set, no need to update
         this.saveJob(job);
         this.showSavedJobs = false;
       } catch (error: any) {
@@ -273,6 +343,7 @@ export class AppComponent {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
+
 
   async copyToClipboard(): Promise<void> {
     try {
@@ -508,5 +579,30 @@ export class AppComponent {
     // Then convert remaining *italic* to <em> (avoiding already processed bold)
     formatted = formatted.replace(/\*([^*]+?)\*/g, '<em>$1</em>');
     return formatted;
+  }
+
+  ngOnDestroy(): void {
+    // Clean up object URL when component is destroyed
+    if (this.audioUrl) {
+      URL.revokeObjectURL(this.audioUrl);
+    }
+  }
+
+  // Helper to get content type from file name
+  private getContentTypeFromFileName(fileName: string): string {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    const contentTypes: { [key: string]: string } = {
+      'mp3': 'audio/mpeg',
+      'wav': 'audio/wav',
+      'ogg': 'audio/ogg',
+      'm4a': 'audio/mp4',
+      'aac': 'audio/aac',
+      'flac': 'audio/flac',
+      'webm': 'audio/webm',
+      'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+      'avi': 'video/x-msvideo'
+    };
+    return contentTypes[extension || ''] || 'audio/mpeg';
   }
 }
