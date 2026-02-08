@@ -1,27 +1,20 @@
 import { Injectable } from '@angular/core';
 import OpenAI from 'openai';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class OpenAIService {
   private openai: OpenAI;
-  // Fallback API key (for local development only)
-  // In production, this will be overridden by NG_APP_OPENAI_API_KEY environment variable
-  private fallbackApiKey: string = '';
 
   constructor() {
-    // Get API key from environment variable (set in AWS Amplify)
-    // Angular will replace process.env['NG_APP_OPENAI_API_KEY'] at build time
-    // If not set, fall back to the hardcoded key (for local dev)
-    const apiKey = (typeof process !== 'undefined' && 
-                    process.env && 
-                    process.env['NG_APP_OPENAI_API_KEY']) 
-      ? process.env['NG_APP_OPENAI_API_KEY'] 
-      : this.fallbackApiKey;
+    // Get API key from environment (injected at build time from NG_APP_OPENAI_API_KEY)
+    // If the placeholder wasn't replaced, it means the env var wasn't set
+    const apiKey = environment.openaiApiKey === '{{OPENAI_API_KEY}}' ? '' : environment.openaiApiKey;
     
     if (!apiKey) {
-      throw new Error('OpenAI API key is not configured. Please set NG_APP_OPENAI_API_KEY environment variable.');
+      throw new Error('OpenAI API key is not configured. Please set NG_APP_OPENAI_API_KEY environment variable in AWS Amplify.');
     }
     
     this.openai = new OpenAI({
