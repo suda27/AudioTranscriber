@@ -222,23 +222,72 @@ export class AppComponent implements OnDestroy {
   async checkForInProgressJobs(): Promise<void> {
     const inProgressJobs = this.savedJobs.filter(j => j.status === 'in_progress');
     if (inProgressJobs.length > 0) {
-      // Check status of in-progress jobs
-      for (const job of inProgressJobs) {
+      // If there's an in-progress job, resume polling
+      const activeJob = inProgressJobs[0]; // Take the first in-progress job
+      this.currentJobName = activeJob.jobName;
+      this.isTranscribing = true;
+      this.transcriptionStatus = 'Resuming transcription job...';
+      
+      // Restore file info if available
+      if (activeJob.fileName) {
+        // Create a placeholder file object (we'll restore audio from S3 if needed)
+        this.selectedFile = new File([], activeJob.fileName);
+      }
+      
+      // Restore audio from S3 if available
+      if (activeJob.s3Uri) {
         try {
-          const result = await this.transcribeService.getTranscriptionJobStatus(job.jobName);
-          if (result.status === 'COMPLETED' && result.transcript) {
-            job.status = 'completed';
-            job.transcript = result.transcript;
-            job.speakerSegments = result.speakerSegments || [];
-            // s3Uri is already set, no need to update
-            this.saveJob(job);
-          } else if (result.status === 'FAILED') {
-            job.status = 'failed';
-            this.saveJob(job);
+          const s3Info = this.s3Service.parseS3Uri(activeJob.s3Uri);
+          if (s3Info) {
+            const blob = await this.s3Service.getObjectAsBlob(s3Info.bucket, s3Info.key, this.getContentTypeFromFileName(activeJob.fileName));
+            this.audioUrl = URL.createObjectURL(blob);
+            this.selectedFile = new File([blob], activeJob.fileName, { type: blob.type });
           }
         } catch (error) {
-          console.error(`Error checking job ${job.jobName}:`, error);
+          console.warn('Could not restore audio file from S3:', error);
         }
+      }
+      
+      // Resume polling for the active job
+      try {
+        const result = await this.transcribeService.pollTranscriptionJob(activeJob.jobName);
+        this.transcriptionResult = result.transcript;
+        this.speakerSegments = result.speakerSegments || [];
+        this.transcriptionStatus = 'Transcription completed successfully!';
+        this.isTranscribing = false;
+        
+        // Update saved job with results
+        activeJob.status = 'completed';
+        activeJob.transcript = result.transcript;
+        activeJob.speakerSegments = result.speakerSegments || [];
+        this.saveJob(activeJob);
+        
+        // Check for any other in-progress jobs
+        const remainingJobs = this.savedJobs.filter(j => j.status === 'in_progress' && j.jobName !== activeJob.jobName);
+        if (remainingJobs.length > 0) {
+          // Check status of remaining jobs (one-time check, don't poll)
+          for (const job of remainingJobs) {
+            try {
+              const jobResult = await this.transcribeService.getTranscriptionJobStatus(job.jobName);
+              if (jobResult.status === 'COMPLETED' && jobResult.transcript) {
+                job.status = 'completed';
+                job.transcript = jobResult.transcript;
+                job.speakerSegments = jobResult.speakerSegments || [];
+                this.saveJob(job);
+              } else if (jobResult.status === 'FAILED') {
+                job.status = 'failed';
+                this.saveJob(job);
+              }
+            } catch (error) {
+              console.error(`Error checking job ${job.jobName}:`, error);
+            }
+          }
+        }
+      } catch (error: any) {
+        this.errorMessage = error.message || 'Failed to resume transcription job';
+        this.isTranscribing = false;
+        this.transcriptionStatus = '';
+        console.error('Error resuming transcription job:', error);
       }
     }
   }

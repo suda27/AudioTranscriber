@@ -60,6 +60,7 @@
           <button 
             class="saved-jobs-button"
             (click)="showSavedJobs = !showSavedJobs"
+            [disabled]="isUploading || isTranscribing"
             *ngIf="savedJobs.length > 0"
           >
             📚 Saved Jobs ({{ savedJobs.length }})
@@ -268,8 +269,23 @@
     </ol>
   </footer> -->
 
+  <!-- Loading Overlay - Blocks interaction during transcription -->
+  <div *ngIf="isUploading || isTranscribing" class="loading-overlay">
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <h3>Processing Audio</h3>
+      <p class="loading-status">{{ transcriptionStatus || 'Please wait...' }}</p>
+      <div class="loading-progress" *ngIf="isUploading || isTranscribing">
+        <div class="progress-bar">
+          <div class="progress-fill" [style.width.%]="uploadProgress || 50"></div>
+        </div>
+      </div>
+      <p class="loading-note">⏱️ Large files may take several minutes to transcribe. Please keep this page open.</p>
+    </div>
+  </div>
+
   <!-- Saved Jobs Modal -->
-  <div *ngIf="showSavedJobs" class="saved-jobs-modal-overlay" (click)="showSavedJobs = false">
+  <div *ngIf="showSavedJobs && !isUploading && !isTranscribing" class="saved-jobs-modal-overlay" (click)="showSavedJobs = false">
     <div class="saved-jobs-modal-content" (click)="$event.stopPropagation()">
       <div class="saved-jobs-header">
         <div class="saved-jobs-title">

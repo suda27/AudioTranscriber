@@ -1140,8 +1140,119 @@ header h1 {
   transition: background 0.2s ease;
 }
 
-.saved-jobs-button:hover {
+.saved-jobs-button:hover:not(:disabled) {
   background: #5a6268;
+}
+
+.saved-jobs-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #9ca3af;
+}
+
+/* Loading Overlay - Blocks interaction during transcription */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.loading-content {
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  max-width: min(500px, calc(100vw - 2rem));
+  width: calc(100% - 2rem);
+  margin: 1rem;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.3s ease-out;
+  box-sizing: border-box;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 5px solid #f3f4f6;
+  border-top: 5px solid #0ea5e9;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1.5rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-content h3 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.loading-status {
+  color: #666;
+  font-size: 1rem;
+  margin: 0 0 1.5rem 0;
+  min-height: 1.5rem;
+}
+
+.loading-progress {
+  margin: 1.5rem 0;
+}
+
+.loading-progress .progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.loading-progress .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0ea5e9, #0284c7);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.loading-note {
+  margin: 1.5rem 0 0 0;
+  color: #6b7280;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  font-style: italic;
 }
 
 /* Modal Styles */
@@ -1750,6 +1861,21 @@ header h1 {
     margin-top: 1rem;
   }
 
+  .loading-content {
+    padding: 1.75rem;
+    max-width: calc(100vw - 2rem);
+    width: calc(100% - 2rem);
+    margin: 1rem;
+  }
+
+  .loading-content h3 {
+    font-size: 1.35rem;
+  }
+
+  .loading-status {
+    font-size: 0.95rem;
+  }
+
   .error-message {
     font-size: 0.85rem;
     padding: 0.75rem;
@@ -1819,6 +1945,31 @@ header h1 {
 
   .modal-content {
     padding: 1rem;
+  }
+
+  .loading-content {
+    padding: 1.5rem;
+    max-width: calc(100vw - 1rem);
+    width: calc(100% - 1rem);
+    margin: 0.5rem;
+  }
+
+  .loading-spinner {
+    width: 50px;
+    height: 50px;
+    border-width: 4px;
+  }
+
+  .loading-content h3 {
+    font-size: 1.25rem;
+  }
+
+  .loading-status {
+    font-size: 0.9rem;
+  }
+
+  .loading-note {
+    font-size: 0.8rem;
   }
 }
 
