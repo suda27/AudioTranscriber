@@ -41,10 +41,5 @@ testem.log
 .DS_Store
 Thumbs.db
 
-# Environment files with credentials (DO NOT COMMIT)
-src/environments/environment.ts
-src/environments/environment.prod.ts
-
-# Environment files with credentials (DO NOT COMMIT)
-src/environments/environment.ts
-src/environments/environment.prod.ts
+# Note: environment.ts and environment.prod.ts are committed because they only contain placeholders.
+# The actual API keys are injected at build time from environment variables.
