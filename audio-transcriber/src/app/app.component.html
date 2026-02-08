@@ -128,6 +128,37 @@
 
       <!-- Speaker-segmented view -->
       <div *ngIf="showSpeakerView && speakerSegments.length > 0" class="speaker-transcription">
+        <!-- Speaker Name Editor Section -->
+        <div class="speaker-names-section" *ngIf="getUniqueSpeakers().length > 0">
+          <h4>✏️ Edit Speaker Names</h4>
+          <div class="speaker-names-list">
+            <div *ngFor="let speaker of getUniqueSpeakers()" class="speaker-name-item">
+              <span class="speaker-color-indicator" [style.background-color]="getSpeakerColor(speaker)"></span>
+              <div *ngIf="editingSpeaker !== speaker" class="speaker-name-display">
+                <span class="speaker-label">{{ formatSpeakerName(speaker) }}</span>
+                <button class="edit-name-btn" (click)="startEditingSpeaker(speaker, $event)" title="Click to edit name">
+                  ✏️
+                </button>
+              </div>
+              <div *ngIf="editingSpeaker === speaker" class="speaker-name-edit">
+                <input 
+                  type="text" 
+                  [(ngModel)]="editingSpeakerName"
+                  (keyup.enter)="saveSpeakerName(speaker)"
+                  (keyup.escape)="cancelEditingSpeaker()"
+                  class="speaker-name-input"
+                  placeholder="Enter speaker name"
+                  #nameInput
+                  (focus)="nameInput.select()"
+                />
+                <button class="save-name-btn" (click)="saveSpeakerName(speaker)">✓</button>
+                <button class="cancel-name-btn" (click)="cancelEditingSpeaker()">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transcription Segments -->
         <div 
           *ngFor="let segment of speakerSegments; let i = index" 
           class="speaker-segment"
@@ -155,7 +186,7 @@
   </div>
 </main>
 
-  <footer class="info-section">
+  <!-- <footer class="info-section">
     <h3>ℹ️ Setup Instructions</h3>
     <ol>
       <li>Configure AWS credentials in <code>aws-config.service.ts</code></li>
@@ -163,5 +194,5 @@
       <li>Ensure your AWS credentials have permissions for S3 and Transcribe</li>
       <li>For production, use AWS Cognito Identity Pool for secure credential management</li>
     </ol>
-  </footer>
+  </footer> -->
 </div>

@@ -41,12 +41,16 @@ export class AppComponent {
   savedJobs: SavedJob[] = [];
   showSavedJobs: boolean = false;
   currentJobName: string = '';
+  speakerNames: { [key: string]: string } = {}; // Map of speaker label to custom name
+  editingSpeaker: string | null = null; // Currently editing speaker label
+  editingSpeakerName: string = ''; // Temporary name while editing
 
   constructor(
     private s3Service: S3Service,
     private transcribeService: TranscribeService
   ) {
     this.loadSavedJobs();
+    this.loadSpeakerNames();
     this.checkForInProgressJobs();
   }
 
@@ -274,6 +278,11 @@ export class AppComponent {
   }
 
   formatSpeakerName(speakerLabel: string): string {
+    // Check if custom name exists
+    if (this.speakerNames[speakerLabel]) {
+      return this.speakerNames[speakerLabel];
+    }
+    
     // Convert spk_0, spk_1 to Speaker 1, Speaker 2, etc.
     const match = speakerLabel.match(/spk_(\d+)/);
     if (match) {
@@ -281,6 +290,43 @@ export class AppComponent {
       return `Speaker ${speakerNum}`;
     }
     return speakerLabel;
+  }
+
+  startEditingSpeaker(speakerLabel: string, event: Event): void {
+    event.stopPropagation();
+    this.editingSpeaker = speakerLabel;
+    this.editingSpeakerName = this.formatSpeakerName(speakerLabel);
+  }
+
+  saveSpeakerName(speakerLabel: string): void {
+    if (this.editingSpeakerName.trim()) {
+      this.speakerNames[speakerLabel] = this.editingSpeakerName.trim();
+      this.saveSpeakerNames();
+    }
+    this.editingSpeaker = null;
+    this.editingSpeakerName = '';
+  }
+
+  cancelEditingSpeaker(): void {
+    this.editingSpeaker = null;
+    this.editingSpeakerName = '';
+  }
+
+  private loadSpeakerNames(): void {
+    const stored = sessionStorage.getItem('speakerNames');
+    if (stored) {
+      this.speakerNames = JSON.parse(stored);
+    }
+  }
+
+  private saveSpeakerNames(): void {
+    sessionStorage.setItem('speakerNames', JSON.stringify(this.speakerNames));
+  }
+
+  getUniqueSpeakers(): string[] {
+    const speakers = new Set<string>();
+    this.speakerSegments.forEach(seg => speakers.add(seg.speaker));
+    return Array.from(speakers).sort();
   }
 
   formatTime(seconds: number): string {
