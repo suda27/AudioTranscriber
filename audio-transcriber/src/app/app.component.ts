@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { S3Service } from './services/s3.service';
@@ -45,13 +45,10 @@ export class AppComponent {
   speakerNames: { [key: string]: string } = {}; // Map of speaker label to custom name
   editingSpeaker: string | null = null; // Currently editing speaker label
   editingSpeakerName: string = ''; // Temporary name while editing
-  searchQuery: string = ''; // Search input
-  searchMatches: number = 0; // Total number of matches
-  currentMatchIndex: number = -1; // Current highlighted match (0-based)
-  searchResults: { segmentIndex?: number; matchIndex: number }[] = []; // All match positions
   summary: string = ''; // Generated summary
   isGeneratingSummary: boolean = false; // Loading state for summary generation
   summaryError: string = ''; // Error message for summary generation
+  hasSummary: boolean = false; // Track if summary column should be shown
 
   constructor(
     private s3Service: S3Service,
@@ -73,7 +70,6 @@ export class AppComponent {
       this.transcriptionStatus = '';
       this.summary = '';
       this.summaryError = '';
-      this.clearSearch();
     }
   }
 
@@ -218,9 +214,10 @@ export class AppComponent {
     // Clear summary when loading a new job
     this.summary = '';
     this.summaryError = '';
+    this.errorMessage = '';
     
-    if (job.status === 'completed' && job.transcript) {
-      this.transcriptionResult = job.transcript;
+    if (job.status === 'completed' && (job.transcript || (job.speakerSegments && job.speakerSegments.length > 0))) {
+      this.transcriptionResult = job.transcript || '';
       this.speakerSegments = job.speakerSegments || [];
       this.transcriptionStatus = 'Transcription retrieved from saved session';
       this.showSavedJobs = false;
@@ -244,6 +241,9 @@ export class AppComponent {
         this.errorMessage = error.message || 'Failed to retrieve transcription';
         this.isTranscribing = false;
       }
+    } else {
+      // Handle failed or other statuses
+      this.errorMessage = 'This job cannot be retrieved. Status: ' + job.status;
     }
   }
 
@@ -373,151 +373,6 @@ export class AppComponent {
     return speakerIndex % 2 === 0;
   }
 
-  // Search functionality
-  onSearchChange(): void {
-    if (!this.searchQuery.trim()) {
-      this.searchMatches = 0;
-      this.currentMatchIndex = -1;
-      this.searchResults = [];
-      return;
-    }
-
-    this.performSearch();
-  }
-
-  performSearch(): void {
-    const query = this.searchQuery.trim().toLowerCase();
-    if (!query) {
-      this.searchMatches = 0;
-      this.currentMatchIndex = -1;
-      this.searchResults = [];
-      return;
-    }
-
-    this.searchResults = [];
-    this.searchMatches = 0;
-
-    if (this.showSpeakerView && this.speakerSegments.length > 0) {
-      // Search in speaker segments
-      this.speakerSegments.forEach((segment, segmentIndex) => {
-        const text = segment.text.toLowerCase();
-        let startIndex = 0;
-        while ((startIndex = text.indexOf(query, startIndex)) !== -1) {
-          this.searchResults.push({ segmentIndex, matchIndex: startIndex });
-          this.searchMatches++;
-          startIndex += query.length;
-        }
-      });
-    } else {
-      // Search in full text
-      const text = this.transcriptionResult.toLowerCase();
-      let startIndex = 0;
-      while ((startIndex = text.indexOf(query, startIndex)) !== -1) {
-        this.searchResults.push({ matchIndex: startIndex });
-        this.searchMatches++;
-        startIndex += query.length;
-      }
-    }
-
-    if (this.searchMatches > 0) {
-      this.currentMatchIndex = 0;
-      this.scrollToMatch();
-    } else {
-      this.currentMatchIndex = -1;
-    }
-  }
-
-  nextMatch(): void {
-    if (this.searchMatches === 0) return;
-    this.currentMatchIndex = (this.currentMatchIndex + 1) % this.searchMatches;
-    this.scrollToMatch();
-  }
-
-  previousMatch(): void {
-    if (this.searchMatches === 0) return;
-    this.currentMatchIndex = this.currentMatchIndex <= 0 
-      ? this.searchMatches - 1 
-      : this.currentMatchIndex - 1;
-    this.scrollToMatch();
-  }
-
-  scrollToMatch(): void {
-    if (this.currentMatchIndex < 0 || this.currentMatchIndex >= this.searchResults.length) return;
-
-    setTimeout(() => {
-      const result = this.searchResults[this.currentMatchIndex];
-      if (result.segmentIndex !== undefined) {
-        // Scroll to speaker segment
-        const segmentElement = document.querySelector(`[data-segment-index="${result.segmentIndex}"]`);
-        if (segmentElement) {
-          // Scroll to show the segment, but keep search bar visible
-          const searchBarHeight = 120; // Approximate height of sticky search bar
-          const elementTop = (segmentElement as HTMLElement).offsetTop;
-          window.scrollTo({
-            top: elementTop - searchBarHeight - 20,
-            behavior: 'smooth'
-          });
-        }
-      } else {
-        // Scroll to full text match
-        const textElement = document.querySelector('.transcription-box');
-        if (textElement) {
-          const searchBarHeight = 120;
-          const elementTop = (textElement as HTMLElement).offsetTop;
-          window.scrollTo({
-            top: elementTop - searchBarHeight - 20,
-            behavior: 'smooth'
-          });
-        }
-      }
-    }, 100);
-  }
-
-  clearSearch(): void {
-    this.searchQuery = '';
-    this.searchMatches = 0;
-    this.currentMatchIndex = -1;
-    this.searchResults = [];
-  }
-
-  highlightText(text: string, query: string): string {
-    if (!query.trim()) return text;
-    
-    const regex = new RegExp(`(${this.escapeRegex(query)})`, 'gi');
-    return text.replace(regex, '<mark class="search-highlight">$1</mark>');
-  }
-
-  highlightTextInSegment(text: string, query: string, segmentIndex: number): string {
-    if (!query.trim()) return text;
-    
-    const regex = new RegExp(`(${this.escapeRegex(query)})`, 'gi');
-    let highlighted = text;
-    let matchIndex = 0;
-    
-    // Find all matches in this segment
-    const segmentMatches = this.searchResults
-      .map((result, idx) => ({ ...result, globalIndex: idx }))
-      .filter(r => r.segmentIndex === segmentIndex);
-    
-    highlighted = highlighted.replace(regex, (match, p1) => {
-      const globalIndex = segmentMatches[matchIndex]?.globalIndex;
-      const isCurrent = globalIndex === this.currentMatchIndex;
-      matchIndex++;
-      const highlightClass = isCurrent ? 'search-highlight current-match' : 'search-highlight';
-      return `<mark class="${highlightClass}">${p1}</mark>`;
-    });
-    
-    return highlighted;
-  }
-
-  private escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  getMatchCountInSegment(segmentIndex: number): number {
-    return this.searchResults.filter(r => r.segmentIndex === segmentIndex).length;
-  }
-
   // Summary generation
   async generateSummary(): Promise<void> {
     if (!this.transcriptionResult && this.speakerSegments.length === 0) {
@@ -530,11 +385,21 @@ export class AppComponent {
     this.summary = '';
 
     try {
+      // Format speaker segments with custom names for better summary
+      let formattedSegments = undefined;
+      if (this.speakerSegments.length > 0) {
+        formattedSegments = this.speakerSegments.map(seg => ({
+          ...seg,
+          speaker: this.formatSpeakerName(seg.speaker) // Use formatted name instead of raw label
+        }));
+      }
+
       const summaryText = await this.openaiService.generateSummary(
         this.transcriptionResult,
-        this.speakerSegments.length > 0 ? this.speakerSegments : undefined
+        formattedSegments
       );
       this.summary = summaryText;
+      this.hasSummary = true;
     } catch (error: any) {
       console.error('Error generating summary:', error);
       this.summaryError = error.message || 'Failed to generate summary. Please try again.';
@@ -553,5 +418,95 @@ export class AppComponent {
       console.error('Failed to copy summary:', error);
       alert('Failed to copy summary to clipboard');
     }
+  }
+
+  formatSummaryText(text: string): string {
+    if (!text) return '';
+    
+    // Split text into lines
+    const lines = text.split('\n');
+    let html = '';
+    let inList = false;
+    let listItems: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      if (!line) {
+        // Empty line - close any open list and add paragraph break
+        if (inList && listItems.length > 0) {
+          html += '<ul>' + listItems.join('') + '</ul>';
+          listItems = [];
+          inList = false;
+        }
+        continue;
+      }
+      
+      // Check for headers
+      if (line.startsWith('**') && line.endsWith('**') && line.includes(':')) {
+        // Main section header (e.g., **Summary of Conversation:**)
+        const headerText = line.replace(/\*\*/g, '').replace(':', '');
+        html += `<h2>${headerText}</h2>`;
+        continue;
+      }
+      
+      // Check for numbered list items (1. item)
+      const numberedMatch = line.match(/^(\d+)\.\s+\*\*(.+?)\*\*:\s*(.+)$/);
+      if (numberedMatch) {
+        if (!inList) {
+          inList = true;
+        }
+        const itemTitle = numberedMatch[2];
+        const itemContent = numberedMatch[3];
+        listItems.push(`<li><strong>${itemTitle}:</strong> ${this.formatInlineMarkdown(itemContent)}</li>`);
+        continue;
+      }
+      
+      // Check for bullet points with sub-items (- item)
+      const bulletMatch = line.match(/^[-•]\s+(.+)$/);
+      if (bulletMatch) {
+        if (!inList) {
+          inList = true;
+        }
+        listItems.push(`<li>${this.formatInlineMarkdown(bulletMatch[1])}</li>`);
+        continue;
+      }
+      
+      // Check for bold labels followed by content (e.g., **Participants:** content)
+      const boldLabelMatch = line.match(/^\*\*(.+?):\*\*\s*(.+)$/);
+      if (boldLabelMatch) {
+        if (inList && listItems.length > 0) {
+          html += '<ul>' + listItems.join('') + '</ul>';
+          listItems = [];
+          inList = false;
+        }
+        html += `<p><strong>${boldLabelMatch[1]}:</strong> ${this.formatInlineMarkdown(boldLabelMatch[2])}</p>`;
+        continue;
+      }
+      
+      // Regular paragraph
+      if (inList && listItems.length > 0) {
+        html += '<ul>' + listItems.join('') + '</ul>';
+        listItems = [];
+        inList = false;
+      }
+      
+      html += `<p>${this.formatInlineMarkdown(line)}</p>`;
+    }
+    
+    // Close any remaining list
+    if (inList && listItems.length > 0) {
+      html += '<ul>' + listItems.join('') + '</ul>';
+    }
+    
+    return html;
+  }
+  
+  private formatInlineMarkdown(text: string): string {
+    // First convert **bold** to <strong>
+    let formatted = text.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+    // Then convert remaining *italic* to <em> (avoiding already processed bold)
+    formatted = formatted.replace(/\*([^*]+?)\*/g, '<em>$1</em>');
+    return formatted;
   }
 }

@@ -5,7 +5,10 @@
   </header>
 
   <main class="main-content">
-    <div class="upload-section">
+    <div class="columns-layout" [class.has-summary]="hasSummary || isGeneratingSummary || summaryError">
+      <!-- Column 1: Upload Form -->
+      <div class="column column-upload">
+        <div class="upload-section">
       <div class="file-input-wrapper">
         <input 
           type="file" 
@@ -38,142 +41,75 @@
         <span *ngIf="isUploading || isTranscribing">⏳ Processing...</span>
       </button>
 
-      <button 
-        class="saved-jobs-button"
-        (click)="showSavedJobs = !showSavedJobs"
-        *ngIf="savedJobs.length > 0"
-      >
-        📚 Saved Jobs ({{ savedJobs.length }})
-      </button>
-    </div>
+          <button 
+            class="saved-jobs-button"
+            (click)="showSavedJobs = !showSavedJobs"
+            *ngIf="savedJobs.length > 0"
+          >
+            📚 Saved Jobs ({{ savedJobs.length }})
+          </button>
 
-    <!-- Confirmation Modal -->
-    <div *ngIf="showConfirmModal" class="modal-overlay" (click)="closeConfirmModal()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
-        <h3>Confirm Upload & Transcribe</h3>
-        <div *ngIf="selectedFile" class="modal-file-info">
-          <p><strong>File:</strong> {{ selectedFile.name }}</p>
-          <p><strong>Size:</strong> {{ formatFileSize(selectedFile.size) }}</p>
-          <p><strong>Type:</strong> {{ selectedFile.type || 'Unknown' }}</p>
-        </div>
-        <p class="modal-message">Are you sure you want to upload this file and start transcription?</p>
-        <div class="modal-actions">
-          <button class="modal-btn cancel" (click)="closeConfirmModal()">Cancel</button>
-          <button class="modal-btn confirm" (click)="confirmAndUpload()">Confirm & Upload</button>
+          <div *ngIf="isUploading || isTranscribing" class="progress-section">
+            <div class="progress-bar">
+              <div class="progress-fill" [style.width.%]="uploadProgress"></div>
+            </div>
+            <p class="status-text">{{ transcriptionStatus }}</p>
+          </div>
+
+          <div *ngIf="errorMessage" class="error-message">
+            <strong>❌ Error:</strong> {{ errorMessage }}
+          </div>
         </div>
       </div>
-    </div>
+      <!-- End Column 1 -->
 
-    <!-- Saved Jobs Section -->
-    <div *ngIf="showSavedJobs && savedJobs.length > 0" class="saved-jobs-section">
-      <div class="saved-jobs-header">
-        <h3>📚 Saved Transcription Jobs</h3>
-        <button class="close-btn" (click)="showSavedJobs = false">✕</button>
-      </div>
-      <div class="jobs-list">
-        <div *ngFor="let job of savedJobs" class="job-item">
-          <div class="job-info">
-            <span class="job-status">{{ getJobStatusIcon(job.status) }}</span>
-            <div class="job-details">
-              <p class="job-file-name"><strong>{{ job.fileName }}</strong></p>
-              <p class="job-meta">{{ formatFileSize(job.fileSize) }} • {{ formatDate(job.startTime) }}</p>
+      <!-- Column 2: Chat Conversation Transcript -->
+      <div class="column column-transcript" *ngIf="transcriptionResult || speakerSegments.length > 0">
+        <div class="result-section">
+          <div class="result-header">
+            <h2>📝 Transcription Result</h2>
+            <div class="header-actions">
+              <div class="view-toggle" *ngIf="speakerSegments.length > 0">
+                <button 
+                  class="toggle-btn" 
+                  [class.active]="showSpeakerView"
+                  (click)="showSpeakerView = true"
+                >
+                  👥 By Speaker
+                </button>
+                <button 
+                  class="toggle-btn" 
+                  [class.active]="!showSpeakerView"
+                  (click)="showSpeakerView = false"
+                >
+                  📄 Full Text
+                </button>
+              </div>
+              <button 
+                class="generate-summary-btn-header"
+                (click)="generateSummary()"
+                [disabled]="isGeneratingSummary || (!transcriptionResult && speakerSegments.length === 0)"
+                [class.loading]="isGeneratingSummary"
+                title="Generate AI Summary"
+              >
+                <span *ngIf="!isGeneratingSummary && !summary" class="btn-content">
+                  <span class="btn-icon">✨</span>
+                  <span>AI Summary</span>
+                </span>
+                <span *ngIf="isGeneratingSummary" class="btn-content">
+                  <span class="btn-spinner"></span>
+                  <span>Generating...</span>
+                </span>
+                <span *ngIf="!isGeneratingSummary && summary" class="btn-content">
+                  <span class="btn-icon">✨</span>
+                  <span>Regenerate</span>
+                </span>
+              </button>
             </div>
           </div>
-          <div class="job-actions">
-            <button 
-              class="job-btn retrieve" 
-              (click)="retrieveJob(job)"
-              *ngIf="job.status === 'completed' || job.status === 'in_progress'"
-            >
-              {{ job.status === 'completed' ? 'View' : 'Check Status' }}
-            </button>
-            <button class="job-btn delete" (click)="deleteJob(job.jobName)">Delete</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div *ngIf="isUploading || isTranscribing" class="progress-section">
-      <div class="progress-bar">
-        <div class="progress-fill" [style.width.%]="uploadProgress"></div>
-      </div>
-      <p class="status-text">{{ transcriptionStatus }}</p>
-    </div>
-
-    <div *ngIf="errorMessage" class="error-message">
-      <strong>❌ Error:</strong> {{ errorMessage }}
-    </div>
-
-    <div *ngIf="transcriptionResult" class="result-section">
-      <div class="result-header">
-        <h2>📝 Transcription Result</h2>
-        <div class="view-toggle" *ngIf="speakerSegments.length > 0">
-          <button 
-            class="toggle-btn" 
-            [class.active]="showSpeakerView"
-            (click)="showSpeakerView = true"
-          >
-            👥 By Speaker
-          </button>
-          <button 
-            class="toggle-btn" 
-            [class.active]="!showSpeakerView"
-            (click)="showSpeakerView = false"
-          >
-            📄 Full Text
-          </button>
-        </div>
-    </div>
-
-      <!-- Search Bar - Sticky -->
-      <div class="search-section" [class.has-results]="searchQuery && searchMatches > 0">
-        <div class="search-input-wrapper">
-          <input 
-            type="text" 
-            [(ngModel)]="searchQuery"
-            (input)="onSearchChange()"
-            (keydown.enter)="nextMatch()"
-            (keydown.escape)="clearSearch()"
-            class="search-input"
-            placeholder="🔍 Search in transcription..."
-          />
-          <button 
-            *ngIf="searchQuery" 
-            class="clear-search-btn"
-            (click)="clearSearch()"
-            title="Clear search"
-          >
-            ✕
-          </button>
-        </div>
-        <div *ngIf="searchQuery && searchMatches > 0" class="search-results-info">
-          <span class="match-count">{{ currentMatchIndex + 1 }} of {{ searchMatches }} matches</span>
-          <div class="search-navigation">
-            <button 
-              class="nav-btn"
-              (click)="previousMatch()"
-              title="Previous match (↑ Arrow)"
-              [disabled]="searchMatches === 0"
-            >
-              ↑ Prev
-            </button>
-            <button 
-              class="nav-btn"
-              (click)="nextMatch()"
-              title="Next match (↓ Arrow or Enter)"
-              [disabled]="searchMatches === 0"
-            >
-              Next ↓
-            </button>
-          </div>
-        </div>
-        <div *ngIf="searchQuery && searchMatches === 0" class="search-no-results">
-          No matches found
-        </div>
-      </div>
 
       <!-- Speaker-segmented view - Chat Style -->
-      <div *ngIf="showSpeakerView && speakerSegments.length > 0" class="chat-container">
+          <div *ngIf="showSpeakerView && speakerSegments.length > 0" class="chat-container">
         <!-- Speaker Name Editor Section - Compact -->
         <div class="speaker-names-section-compact" *ngIf="getUniqueSpeakers().length > 0">
           <div class="speaker-names-list-compact">
@@ -211,7 +147,6 @@
             [class.message-left]="isSpeakerLeft(segment.speaker)"
             [class.message-right]="!isSpeakerLeft(segment.speaker)"
             [attr.data-segment-index]="i"
-            [class.has-search-match]="searchQuery && getMatchCountInSegment(i) > 0"
           >
             <div 
               class="chat-message"
@@ -224,59 +159,78 @@
               </div>
               <div 
                 class="message-text"
-                [innerHTML]="highlightTextInSegment(segment.text, searchQuery, i)"
-              ></div>
+              >{{ segment.text }}</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Full text view -->
-      <div *ngIf="!showSpeakerView || speakerSegments.length === 0" class="transcription-box">
-        <p [innerHTML]="highlightText(transcriptionResult, searchQuery)"></p>
-      </div>
-
-      <button class="copy-button" (click)="copyToClipboard()">📋 Copy to Clipboard</button>
-
-      <!-- Summary Section -->
-      <div class="summary-section" *ngIf="transcriptionResult || speakerSegments.length > 0">
-        <div class="summary-header">
-          <h3>📊 Conversation Summary</h3>
-          <button 
-            class="generate-summary-btn"
-            (click)="generateSummary()"
-            [disabled]="isGeneratingSummary || (!transcriptionResult && speakerSegments.length === 0)"
-          >
-            <span *ngIf="!isGeneratingSummary && !summary">✨ Generate Summary</span>
-            <span *ngIf="isGeneratingSummary">⏳ Generating...</span>
-            <span *ngIf="!isGeneratingSummary && summary">🔄 Regenerate</span>
-          </button>
-        </div>
-
-        <div *ngIf="isGeneratingSummary" class="summary-loading">
-          <div class="loading-spinner"></div>
-          <p>Generating summary using AI...</p>
-        </div>
-
-        <div *ngIf="summaryError" class="summary-error">
-          <strong>❌ Error:</strong> {{ summaryError }}
-        </div>
-
-        <div *ngIf="summary && !isGeneratingSummary" class="summary-content">
-          <div class="summary-text">
-            <p [innerHTML]="summary"></p>
+          <!-- Full text view -->
+          <div *ngIf="!showSpeakerView || speakerSegments.length === 0" class="transcription-box">
+            <p>{{ transcriptionResult }}</p>
           </div>
-          <button class="copy-summary-btn" (click)="copySummaryToClipboard()">
-            📋 Copy Summary
-          </button>
-        </div>
 
-        <div *ngIf="!summary && !isGeneratingSummary && !summaryError" class="summary-placeholder">
-          <p>Click "Generate Summary" to create an AI-powered summary of this conversation.</p>
+          <button class="copy-button" (click)="copyToClipboard()">📋 Copy to Clipboard</button>
         </div>
       </div>
-  </div>
-</main>
+      <!-- End Column 2 -->
+
+      <!-- Column 3: Summary -->
+      <div class="column column-summary" *ngIf="transcriptionResult || speakerSegments.length > 0">
+        <div class="summary-section">
+          <div class="summary-header">
+          <div class="summary-title-group">
+            <div class="summary-icon">📊</div>
+            <div>
+              <h3>Conversation Summary</h3>
+              <p class="summary-subtitle">AI-powered insights from your transcription</p>
+            </div>
+          </div>
+          </div>
+
+          <div *ngIf="isGeneratingSummary" class="summary-loading">
+          <div class="loading-container">
+            <div class="loading-spinner-large"></div>
+            <div class="loading-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <p class="loading-text">Analyzing conversation with AI...</p>
+          </div>
+          </div>
+
+          <div *ngIf="summaryError" class="summary-error">
+          <div class="error-icon">⚠️</div>
+          <div class="error-content">
+            <strong>Error generating summary</strong>
+            <p>{{ summaryError }}</p>
+          </div>
+          </div>
+
+          <div *ngIf="summary && !isGeneratingSummary" class="summary-content">
+          <div class="summary-text-wrapper">
+            <div class="summary-text" [innerHTML]="formatSummaryText(summary)"></div>
+          </div>
+          <div class="summary-actions">
+            <button class="copy-summary-btn" (click)="copySummaryToClipboard()">
+              <span class="btn-icon">📋</span>
+              <span>Copy Summary</span>
+            </button>
+          </div>
+          </div>
+
+          <div *ngIf="!summary && !isGeneratingSummary && !summaryError" class="summary-placeholder">
+            <div class="placeholder-icon">💡</div>
+            <p class="placeholder-text">Click "Generate Summary" to create an AI-powered summary of this conversation.</p>
+            <p class="placeholder-hint">Get key insights, main topics, and important points in seconds.</p>
+          </div>
+        </div>
+      </div>
+      <!-- End Column 3 -->
+    </div>
+    <!-- End Columns Layout -->
+  </main>
 
   <!-- <footer class="info-section">
     <h3>ℹ️ Setup Instructions</h3>
@@ -287,4 +241,43 @@
       <li>For production, use AWS Cognito Identity Pool for secure credential management</li>
     </ol>
   </footer> -->
+
+  <!-- Saved Jobs Modal -->
+  <div *ngIf="showSavedJobs" class="saved-jobs-modal-overlay" (click)="showSavedJobs = false">
+    <div class="saved-jobs-modal-content" (click)="$event.stopPropagation()">
+      <div class="saved-jobs-header">
+        <div class="saved-jobs-title">
+          <span class="saved-jobs-icon">📚</span>
+          <h3>Saved Jobs</h3>
+          <span class="saved-jobs-count">({{ savedJobs.length }})</span>
+        </div>
+        <button class="close-btn" (click)="showSavedJobs = false" title="Close">✕</button>
+      </div>
+      <div class="jobs-list">
+        <div *ngFor="let job of savedJobs" class="job-item">
+          <div class="job-info" (click)="retrieveJob(job)">
+            <span class="job-status">{{ getJobStatusIcon(job.status) }}</span>
+            <div class="job-details">
+              <p class="job-file-name">{{ job.fileName }}</p>
+              <p class="job-meta">
+                <span class="job-meta-item">{{ formatFileSize(job.fileSize) }}</span>
+                <span class="job-meta-separator">•</span>
+                <span class="job-meta-item">{{ formatDate(job.startTime) }}</span>
+              </p>
+            </div>
+          </div>
+          <button 
+            class="delete-job-btn" 
+            (click)="deleteJob(job.jobName); $event.stopPropagation()"
+            title="Delete job"
+          >
+            🗑️
+          </button>
+        </div>
+        <div *ngIf="savedJobs.length === 0" class="no-jobs-message">
+          <p>No saved jobs yet. Your transcription jobs will appear here.</p>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
