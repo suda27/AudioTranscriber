@@ -44,6 +44,10 @@ export class AppComponent {
   speakerNames: { [key: string]: string } = {}; // Map of speaker label to custom name
   editingSpeaker: string | null = null; // Currently editing speaker label
   editingSpeakerName: string = ''; // Temporary name while editing
+  searchQuery: string = ''; // Search input
+  searchMatches: number = 0; // Total number of matches
+  currentMatchIndex: number = -1; // Current highlighted match (0-based)
+  searchResults: { segmentIndex?: number; matchIndex: number }[] = []; // All match positions
 
   constructor(
     private s3Service: S3Service,
@@ -349,5 +353,156 @@ export class AppComponent {
       '#e83e8c'  // Pink
     ];
     return colors[speakerIndex % colors.length];
+  }
+
+  isSpeakerLeft(speaker: string): boolean {
+    const speakerIndex = parseInt(speaker.replace('spk_', '')) || 0;
+    // Even index speakers on left, odd on right (like chat apps)
+    return speakerIndex % 2 === 0;
+  }
+
+  // Search functionality
+  onSearchChange(): void {
+    if (!this.searchQuery.trim()) {
+      this.searchMatches = 0;
+      this.currentMatchIndex = -1;
+      this.searchResults = [];
+      return;
+    }
+
+    this.performSearch();
+  }
+
+  performSearch(): void {
+    const query = this.searchQuery.trim().toLowerCase();
+    if (!query) {
+      this.searchMatches = 0;
+      this.currentMatchIndex = -1;
+      this.searchResults = [];
+      return;
+    }
+
+    this.searchResults = [];
+    this.searchMatches = 0;
+
+    if (this.showSpeakerView && this.speakerSegments.length > 0) {
+      // Search in speaker segments
+      this.speakerSegments.forEach((segment, segmentIndex) => {
+        const text = segment.text.toLowerCase();
+        let startIndex = 0;
+        while ((startIndex = text.indexOf(query, startIndex)) !== -1) {
+          this.searchResults.push({ segmentIndex, matchIndex: startIndex });
+          this.searchMatches++;
+          startIndex += query.length;
+        }
+      });
+    } else {
+      // Search in full text
+      const text = this.transcriptionResult.toLowerCase();
+      let startIndex = 0;
+      while ((startIndex = text.indexOf(query, startIndex)) !== -1) {
+        this.searchResults.push({ matchIndex: startIndex });
+        this.searchMatches++;
+        startIndex += query.length;
+      }
+    }
+
+    if (this.searchMatches > 0) {
+      this.currentMatchIndex = 0;
+      this.scrollToMatch();
+    } else {
+      this.currentMatchIndex = -1;
+    }
+  }
+
+  nextMatch(): void {
+    if (this.searchMatches === 0) return;
+    this.currentMatchIndex = (this.currentMatchIndex + 1) % this.searchMatches;
+    this.scrollToMatch();
+  }
+
+  previousMatch(): void {
+    if (this.searchMatches === 0) return;
+    this.currentMatchIndex = this.currentMatchIndex <= 0 
+      ? this.searchMatches - 1 
+      : this.currentMatchIndex - 1;
+    this.scrollToMatch();
+  }
+
+  scrollToMatch(): void {
+    if (this.currentMatchIndex < 0 || this.currentMatchIndex >= this.searchResults.length) return;
+
+    setTimeout(() => {
+      const result = this.searchResults[this.currentMatchIndex];
+      if (result.segmentIndex !== undefined) {
+        // Scroll to speaker segment
+        const segmentElement = document.querySelector(`[data-segment-index="${result.segmentIndex}"]`);
+        if (segmentElement) {
+          // Scroll to show the segment, but keep search bar visible
+          const searchBarHeight = 120; // Approximate height of sticky search bar
+          const elementTop = (segmentElement as HTMLElement).offsetTop;
+          window.scrollTo({
+            top: elementTop - searchBarHeight - 20,
+            behavior: 'smooth'
+          });
+        }
+      } else {
+        // Scroll to full text match
+        const textElement = document.querySelector('.transcription-box');
+        if (textElement) {
+          const searchBarHeight = 120;
+          const elementTop = (textElement as HTMLElement).offsetTop;
+          window.scrollTo({
+            top: elementTop - searchBarHeight - 20,
+            behavior: 'smooth'
+          });
+        }
+      }
+    }, 100);
+  }
+
+  clearSearch(): void {
+    this.searchQuery = '';
+    this.searchMatches = 0;
+    this.currentMatchIndex = -1;
+    this.searchResults = [];
+  }
+
+  highlightText(text: string, query: string): string {
+    if (!query.trim()) return text;
+    
+    const regex = new RegExp(`(${this.escapeRegex(query)})`, 'gi');
+    return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+  }
+
+  highlightTextInSegment(text: string, query: string, segmentIndex: number): string {
+    if (!query.trim()) return text;
+    
+    const regex = new RegExp(`(${this.escapeRegex(query)})`, 'gi');
+    let highlighted = text;
+    let matchIndex = 0;
+    
+    // Find all matches in this segment
+    const segmentMatches = this.searchResults
+      .map((result, idx) => ({ ...result, globalIndex: idx }))
+      .filter(r => r.segmentIndex === segmentIndex);
+    
+    highlighted = highlighted.replace(regex, (match, p1) => {
+      const globalIndex = segmentMatches[matchIndex]?.globalIndex;
+      const isCurrent = globalIndex === this.currentMatchIndex;
+      matchIndex++;
+      const highlightClass = isCurrent ? 'search-highlight current-match' : 'search-highlight';
+      return `<mark class="${highlightClass}">${p1}</mark>`;
+    });
+    
+    return highlighted;
+  }
+
+  private escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  getMatchCountInSegment(segmentIndex: number): number {
+    return this.searchResults.filter(r => r.segmentIndex === segmentIndex).length;
   }
 }

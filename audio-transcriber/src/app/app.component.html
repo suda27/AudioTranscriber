@@ -123,63 +123,118 @@
             📄 Full Text
           </button>
         </div>
+    </div>
+
+      <!-- Search Bar - Sticky -->
+      <div class="search-section" [class.has-results]="searchQuery && searchMatches > 0">
+        <div class="search-input-wrapper">
+          <input 
+            type="text" 
+            [(ngModel)]="searchQuery"
+            (input)="onSearchChange()"
+            (keydown.enter)="nextMatch()"
+            (keydown.escape)="clearSearch()"
+            class="search-input"
+            placeholder="🔍 Search in transcription..."
+          />
+          <button 
+            *ngIf="searchQuery" 
+            class="clear-search-btn"
+            (click)="clearSearch()"
+            title="Clear search"
+          >
+            ✕
+          </button>
+        </div>
+        <div *ngIf="searchQuery && searchMatches > 0" class="search-results-info">
+          <span class="match-count">{{ currentMatchIndex + 1 }} of {{ searchMatches }} matches</span>
+          <div class="search-navigation">
+            <button 
+              class="nav-btn"
+              (click)="previousMatch()"
+              title="Previous match (↑ Arrow)"
+              [disabled]="searchMatches === 0"
+            >
+              ↑ Prev
+            </button>
+            <button 
+              class="nav-btn"
+              (click)="nextMatch()"
+              title="Next match (↓ Arrow or Enter)"
+              [disabled]="searchMatches === 0"
+            >
+              Next ↓
+            </button>
+          </div>
+        </div>
+        <div *ngIf="searchQuery && searchMatches === 0" class="search-no-results">
+          No matches found
+        </div>
       </div>
 
-      <!-- Speaker-segmented view -->
-      <div *ngIf="showSpeakerView && speakerSegments.length > 0" class="speaker-transcription">
-        <!-- Speaker Name Editor Section -->
-        <div class="speaker-names-section" *ngIf="getUniqueSpeakers().length > 0">
-          <h4>✏️ Edit Speaker Names</h4>
-          <div class="speaker-names-list">
-            <div *ngFor="let speaker of getUniqueSpeakers()" class="speaker-name-item">
+      <!-- Speaker-segmented view - Chat Style -->
+      <div *ngIf="showSpeakerView && speakerSegments.length > 0" class="chat-container">
+        <!-- Speaker Name Editor Section - Compact -->
+        <div class="speaker-names-section-compact" *ngIf="getUniqueSpeakers().length > 0">
+          <div class="speaker-names-list-compact">
+            <div *ngFor="let speaker of getUniqueSpeakers()" class="speaker-name-item-compact">
               <span class="speaker-color-indicator" [style.background-color]="getSpeakerColor(speaker)"></span>
-              <div *ngIf="editingSpeaker !== speaker" class="speaker-name-display">
-                <span class="speaker-label">{{ formatSpeakerName(speaker) }}</span>
-                <button class="edit-name-btn" (click)="startEditingSpeaker(speaker, $event)" title="Click to edit name">
+              <div *ngIf="editingSpeaker !== speaker" class="speaker-name-display-compact">
+                <span class="speaker-label-compact">{{ formatSpeakerName(speaker) }}</span>
+                <button class="edit-name-btn-compact" (click)="startEditingSpeaker(speaker, $event)" title="Edit name">
                   ✏️
                 </button>
               </div>
-              <div *ngIf="editingSpeaker === speaker" class="speaker-name-edit">
+              <div *ngIf="editingSpeaker === speaker" class="speaker-name-edit-compact">
                 <input 
                   type="text" 
                   [(ngModel)]="editingSpeakerName"
                   (keyup.enter)="saveSpeakerName(speaker)"
                   (keyup.escape)="cancelEditingSpeaker()"
-                  class="speaker-name-input"
-                  placeholder="Enter speaker name"
+                  class="speaker-name-input-compact"
+                  placeholder="Enter name"
                   #nameInput
                   (focus)="nameInput.select()"
                 />
-                <button class="save-name-btn" (click)="saveSpeakerName(speaker)">✓</button>
-                <button class="cancel-name-btn" (click)="cancelEditingSpeaker()">✕</button>
+                <button class="save-name-btn-compact" (click)="saveSpeakerName(speaker)">✓</button>
+                <button class="cancel-name-btn-compact" (click)="cancelEditingSpeaker()">✕</button>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Transcription Segments -->
-        <div 
-          *ngFor="let segment of speakerSegments; let i = index" 
-          class="speaker-segment"
-          [style.border-left-color]="getSpeakerColor(segment.speaker)"
-        >
-          <div class="speaker-header">
-            <span 
-              class="speaker-badge"
-              [style.background-color]="getSpeakerColor(segment.speaker)"
+        <!-- Chat Messages -->
+        <div class="chat-messages">
+          <div 
+            *ngFor="let segment of speakerSegments; let i = index" 
+            class="chat-message-wrapper"
+            [class.message-left]="isSpeakerLeft(segment.speaker)"
+            [class.message-right]="!isSpeakerLeft(segment.speaker)"
+            [attr.data-segment-index]="i"
+            [class.has-search-match]="searchQuery && getMatchCountInSegment(i) > 0"
+          >
+            <div 
+              class="chat-message"
+              [style.background-color]="isSpeakerLeft(segment.speaker) ? '#ffffff' : getSpeakerColor(segment.speaker)"
+              [style.color]="isSpeakerLeft(segment.speaker) ? '#333' : '#ffffff'"
             >
-              {{ formatSpeakerName(segment.speaker) }}
-            </span>
-            <span class="time-stamp">{{ formatTime(segment.startTime) }} - {{ formatTime(segment.endTime) }}</span>
+              <div class="message-header">
+                <span class="message-sender">{{ formatSpeakerName(segment.speaker) }}</span>
+                <span class="message-time">{{ formatTime(segment.startTime) }}</span>
+              </div>
+              <div 
+                class="message-text"
+                [innerHTML]="highlightTextInSegment(segment.text, searchQuery, i)"
+              ></div>
+            </div>
           </div>
-          <p class="speaker-text">{{ segment.text }}</p>
         </div>
       </div>
 
       <!-- Full text view -->
       <div *ngIf="!showSpeakerView || speakerSegments.length === 0" class="transcription-box">
-        <p>{{ transcriptionResult }}</p>
-    </div>
+        <p [innerHTML]="highlightText(transcriptionResult, searchQuery)"></p>
+      </div>
 
       <button class="copy-button" (click)="copyToClipboard()">📋 Copy to Clipboard</button>
   </div>
