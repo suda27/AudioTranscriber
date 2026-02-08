@@ -1,7 +1,7 @@
 <div class="container">
   <header>
-    <h1>🎙️ Audio Transcriber</h1>
-    <p class="subtitle">Upload an audio file and get it transcribed using AWS Transcribe</p>
+    <h1>🎙️ Kani's Audio Transcriber</h1>
+    <p class="subtitle">Upload a file and get it transcribed using AWS Transcribe</p>
   </header>
 
   <main class="main-content">
@@ -10,7 +10,6 @@
         <input 
           type="file" 
           id="audioFile" 
-          accept="audio/*" 
           (change)="onFileSelected($event)"
           class="file-input"
         />
@@ -20,7 +19,7 @@
             <polyline points="17 8 12 3 7 8"></polyline>
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
-          <span>{{ selectedFile ? selectedFile.name : 'Choose Audio File' }}</span>
+          <span>{{ selectedFile ? selectedFile.name : 'Choose File' }}</span>
         </label>
       </div>
 
@@ -180,7 +179,7 @@
       <!-- Full text view -->
       <div *ngIf="!showSpeakerView || speakerSegments.length === 0" class="transcription-box">
         <p>{{ transcriptionResult }}</p>
-      </div>
+    </div>
 
       <button class="copy-button" (click)="copyToClipboard()">📋 Copy to Clipboard</button>
   </div>
